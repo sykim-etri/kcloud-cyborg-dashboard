@@ -1,0 +1,4 @@
+pbr>=2.0.0
+Django>=3.2
+horizon>=23.0.0
+keystoneauth1>=4.3.1
