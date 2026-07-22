@@ -21,6 +21,10 @@ class Accelerator(horizon.Panel):
     name = _("Accelerator")
     slug = 'accelerator'
     permissions = ('openstack.roles.admin',)
+    # Evaluated in addition to the role check above. Inert until the operator
+    # registers a Cyborg policy file under the 'accelerator' key in
+    # POLICY_FILES; openstack_auth treats an unknown scope as allowed.
+    policy_rules = (("accelerator", "cyborg:device:get_all"),)
 
     def allowed(self, context):
         request = context['request']
