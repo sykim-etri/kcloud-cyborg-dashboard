@@ -10,8 +10,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from django.utils.html import escape
 from django.urls import reverse
+from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
@@ -19,7 +19,7 @@ from horizon import tables
 
 
 def get_device_instance_link(device):
-    """Return HTML with links to instance detail; link text is instance name."""
+    """Return links to instance detail, labelled with the instance name."""
     instances = device.get('attached_instances', [])
     if not instances:
         return "-"
@@ -40,12 +40,15 @@ class DevicesTable(tables.DataTable):
     model = tables.Column("model", verbose_name=_("Model"))
     hostname = tables.Column("hostname", verbose_name=_("Hostname"))
     attached_instances = tables.WrappingColumn(
-        "attached_instances_display",
+        get_device_instance_link,
         verbose_name=_("Attached Instance(s)"))
     usage = tables.Column("usage_display", verbose_name=_("Usage"))
 
     def get_object_id(self, device):
-        return device.get('uuid', '')
+        # Fall back to the internal id so devices without a uuid do not all
+        # collapse onto the same row id.
+        object_id = device.get('uuid') or device.get('id')
+        return str(object_id) if object_id is not None else ''
 
     class Meta(object):
         name = "accelerator_devices"
