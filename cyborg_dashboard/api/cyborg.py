@@ -40,7 +40,7 @@ def make_adapter(request):
         token=request.user.token.id,
         project_id=request.user.project_id,
         project_name=request.user.project_name,
-        project_domain_name=request.user.domain_id,
+        project_domain_id=request.user.domain_id,
     )
     verify = True
     if settings.OPENSTACK_SSL_NO_VERIFY:
@@ -54,34 +54,46 @@ def make_adapter(request):
 
 
 def _get_json(request, path):
-    adapter = make_adapter(request)
+    client = make_adapter(request)
 
     base_uri = base.url_for(request, 'accelerator')
     new_uri = base_uri.rstrip('/') + '/' + path.lstrip('/')
 
-    response, body = adapter.get(new_uri)
-    return response.json()
+    # LegacyJsonAdapter already decodes the payload; re-parsing the raw
+    # response would blow up on an empty body (e.g. HTTP 204).
+    _response, body = client.get(new_uri)
+    return body if isinstance(body, dict) else {}
+
+
+def _get_list(request, path, key):
+    """Fetch ``path`` and return ``body[key]``, normalised to a list.
+
+    ``dict.get(key, [])`` only defaults when the key is absent, so an
+    explicit ``{"devices": null}`` would leak a None to the caller.
+
+    No marker/limit handling: the Cyborg v2 ``get_all`` controllers for
+    devices, deployables and ARQs take filters only and return the full
+    collection, so there is no pagination to follow.
+    """
+    result = _get_json(request, path)
+    return result.get(key) or []
 
 
 def device_list(request):
     """List accelerator devices (FPGA, GPU, etc.) from Cyborg API."""
-    result = _get_json(request, 'devices')
-    return result.get('devices', [])
+    return _get_list(request, 'devices', 'devices')
 
 
 def device_profile_list(request):
     """List device profiles from Cyborg API."""
-    result = _get_json(request, 'device_profiles')
-    return result.get('device_profiles', [])
+    return _get_list(request, 'device_profiles', 'device_profiles')
 
 
 def accelerator_request_list(request):
     """List accelerator requests (ARQs) - accelerators bound to instances."""
-    result = _get_json(request, 'accelerator_requests')
-    return result.get('arqs', [])
+    return _get_list(request, 'accelerator_requests', 'arqs')
 
 
 def deployable_list(request):
-    """List deployables - logical units linking devices to resource providers."""
-    result = _get_json(request, 'deployables')
-    return result.get('deployables', [])
+    """List deployables linking devices to resource providers."""
+    return _get_list(request, 'deployables', 'deployables')
