@@ -27,6 +27,17 @@ class FakeServer(object):
 
 
 NOVA_LIST = 'openstack_dashboard.api.nova.server_list'
+PLACEMENT_INV = ('openstack_dashboard.api.placement'
+                 '.resource_provider_inventories')
+PLACEMENT_TRAITS = ('openstack_dashboard.api.placement'
+                    '.resource_provider_traits')
+
+
+def _no_placement():
+    # Context managers that make Placement return nothing, for tests that
+    # only care about the instance/usage decoration.
+    return (mock.patch(PLACEMENT_INV, return_value={}),
+            mock.patch(PLACEMENT_TRAITS, return_value=[]))
 
 
 class ResolveInstanceNamesTest(unittest.TestCase):
@@ -88,13 +99,15 @@ class ResolveInstanceNamesTest(unittest.TestCase):
 class DecorateTest(unittest.TestCase):
 
     def test_builds_display_dicts_and_label(self):
+        deployables = [{'device_id': 1, 'rp_uuid': 'rp-a'}]
         devices = usage.correlate(
-            [{'id': 1, 'uuid': 'dev-a'}],
-            [{'device_id': 1, 'rp_uuid': 'rp-a'}],
+            [{'id': 1, 'uuid': 'dev-a'}], deployables,
             [{'device_rp_uuid': 'rp-a', 'instance_uuid': 'i-1'}])
+        inv, traits = _no_placement()
         with mock.patch(NOVA_LIST,
-                        return_value=([FakeServer('i-1', 'gpu-vm')], False)):
-            result = views._decorate(None, devices)
+                        return_value=([FakeServer('i-1', 'gpu-vm')], False)), \
+                inv, traits:
+            result = views._decorate(None, devices, deployables)
         self.assertEqual(
             [{'instance_uuid': 'i-1', 'instance_name': 'gpu-vm'}],
             result[0]['attached_instances'])
@@ -103,16 +116,45 @@ class DecorateTest(unittest.TestCase):
     def test_unknown_usage_is_labelled_unknown(self):
         devices = usage.correlate([{'id': 1, 'uuid': 'dev-a'}], [], [],
                                   usage_known=False)
-        with mock.patch(NOVA_LIST, return_value=([], False)):
-            result = views._decorate(None, devices)
+        inv, traits = _no_placement()
+        with mock.patch(NOVA_LIST, return_value=([], False)), inv, traits:
+            result = views._decorate(None, devices, [])
         self.assertEqual('Unknown', str(result[0]['usage_display']))
 
     def test_available_device_has_no_instances(self):
         devices = usage.correlate([{'id': 1, 'uuid': 'dev-a'}], [], [])
-        with mock.patch(NOVA_LIST, return_value=([], False)):
-            result = views._decorate(None, devices)
+        inv, traits = _no_placement()
+        with mock.patch(NOVA_LIST, return_value=([], False)), inv, traits:
+            result = views._decorate(None, devices, [])
         self.assertEqual([], result[0]['attached_instances'])
         self.assertEqual('Available', str(result[0]['usage_display']))
+
+    def test_attaches_resource_class_and_traits_from_placement(self):
+        deployables = [{'device_id': 1, 'rp_uuid': 'rp-a'}]
+        devices = usage.correlate([{'id': 1, 'uuid': 'dev-a'}],
+                                  deployables, [])
+        with mock.patch(NOVA_LIST, return_value=([], False)), \
+                mock.patch(PLACEMENT_INV, return_value={'PGPU': {}}), \
+                mock.patch(PLACEMENT_TRAITS,
+                           return_value=['CUSTOM_NVIDIA_1E78',
+                                         'HW_GPU_API_VULKAN']):
+            result = views._decorate(None, devices, deployables)
+        self.assertEqual(['PGPU'], result[0]['resource_classes'])
+        # HW_ trait filtered out; only the device-specific custom trait shown.
+        self.assertEqual(['CUSTOM_NVIDIA_1E78'], result[0]['device_traits'])
+
+    def test_placement_failure_degrades_to_empty(self):
+        deployables = [{'device_id': 1, 'rp_uuid': 'rp-a'}]
+        devices = usage.correlate([{'id': 1, 'uuid': 'dev-a'}],
+                                  deployables, [])
+        with mock.patch(NOVA_LIST, return_value=([], False)), \
+                mock.patch(PLACEMENT_INV,
+                           side_effect=RuntimeError('placement down')), \
+                mock.patch(PLACEMENT_TRAITS,
+                           side_effect=RuntimeError('placement down')):
+            result = views._decorate(None, devices, deployables)
+        self.assertEqual([], result[0]['resource_classes'])
+        self.assertEqual([], result[0]['device_traits'])
 
 
 class GetDataTest(unittest.TestCase):

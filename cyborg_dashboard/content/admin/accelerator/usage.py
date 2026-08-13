@@ -107,3 +107,46 @@ def collect_instance_uuids(devices):
     for device in (devices or []):
         uuids.update(device.get('attached_instances') or [])
     return uuids
+
+
+def rp_uuids_for_device(device, deployables):
+    """Resource provider uuids backing a device, via its deployables.
+
+    A device may have more than one deployable (one per accelerator), each
+    with its own resource provider; return them de-duplicated in order.
+    """
+    keys = set(_device_keys(device))
+    uuids = []
+    for dep in (deployables or []):
+        rp_uuid = dep.get('rp_uuid')
+        if rp_uuid and dep.get('device_id') in keys and rp_uuid not in uuids:
+            uuids.append(rp_uuid)
+    return uuids
+
+
+def collect_rp_uuids(devices, deployables):
+    """Every resource provider uuid backing the given devices."""
+    uuids = set()
+    for device in (devices or []):
+        uuids.update(rp_uuids_for_device(device, deployables))
+    return uuids
+
+
+def describe_placement(rp_uuids, rp_inventory, rp_traits, custom_only=True):
+    """Aggregate resource classes and traits across a device's providers.
+
+    :param rp_uuids: the device's resource provider uuids
+    :param rp_inventory: {rp_uuid: [resource class, ...]}
+    :param rp_traits: {rp_uuid: [trait, ...]}
+    :param custom_only: keep only CUSTOM_ traits (the device-specific ones
+        used in device profiles); standard COMPUTE_/HW_ traits are noise here
+    :returns: (sorted resource classes, sorted traits)
+    """
+    classes = set()
+    traits = set()
+    for rp_uuid in rp_uuids:
+        classes.update(rp_inventory.get(rp_uuid) or [])
+        for trait in rp_traits.get(rp_uuid) or []:
+            if not custom_only or trait.startswith('CUSTOM_'):
+                traits.add(trait)
+    return sorted(classes), sorted(traits)

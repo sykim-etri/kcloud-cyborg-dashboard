@@ -34,11 +34,30 @@ def get_device_instance_link(device):
     return mark_safe(', '.join(links)) if links else "-"
 
 
+def render_resource_classes(device):
+    """Placement resource classes backing the device, e.g. 'PGPU'."""
+    return ', '.join(device.get('resource_classes') or []) or '-'
+
+
+def render_traits(device):
+    """Custom Placement traits, e.g. 'CUSTOM_NVIDIA_1E78'.
+
+    These are the values a device profile references, so surfacing them here
+    lets an admin read a device's resource class and trait straight off this
+    panel when writing a profile.
+    """
+    return ', '.join(device.get('device_traits') or []) or '-'
+
+
 class DevicesTable(tables.DataTable):
     uuid = tables.Column("uuid", verbose_name=_("UUID"))
     type = tables.Column("type", verbose_name=_("Type"))
     model = tables.Column("model", verbose_name=_("Model"))
     hostname = tables.Column("hostname", verbose_name=_("Hostname"))
+    resource_class = tables.Column(
+        render_resource_classes, verbose_name=_("Resource Class"))
+    traits = tables.WrappingColumn(
+        render_traits, verbose_name=_("Traits"))
     attached_instances = tables.WrappingColumn(
         get_device_instance_link,
         verbose_name=_("Attached Instance(s)"))
