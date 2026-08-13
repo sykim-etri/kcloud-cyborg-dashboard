@@ -20,6 +20,7 @@ rather than surfacing a raw HTTP 400.
 Keep the rules in sync with the Cyborg release this plugin targets.
 """
 
+import json
 import re
 
 NAME_RE = re.compile(r'^[a-zA-Z0-9-_]+$')
@@ -69,6 +70,40 @@ def parse_groups(text):
     if current:
         groups.append(current)
     return groups
+
+
+def parse_groups_json(text):
+    """Parse groups from the CLI's JSON form: a list of group objects.
+
+    Matches ``openstack accelerator device profile`` so a value copied from
+    the CLI or the API pastes in unchanged. A bare object is wrapped in a
+    list. Values may be numbers in JSON (``"resources:FPGA": 1``); the
+    key=value form and stored profiles use strings, so they are normalised.
+    """
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise ValidationError("Groups is not valid JSON: %s" % exc)
+    if isinstance(data, dict):
+        data = [data]
+    if not isinstance(data, list) or not all(
+            isinstance(group, dict) for group in data):
+        raise ValidationError(
+            'JSON groups must be a list of objects, e.g. '
+            '[{"resources:FPGA": 1}].')
+    return [{str(k): str(v) for k, v in group.items()} for group in data]
+
+
+def parse_groups_auto(text):
+    """Parse groups from either the key=value textarea or the JSON form.
+
+    Text that starts with ``[`` or ``{`` is treated as JSON; anything else
+    is the key=value form.
+    """
+    stripped = (text or '').strip()
+    if stripped.startswith('[') or stripped.startswith('{'):
+        return parse_groups_json(stripped)
+    return parse_groups(text)
 
 
 def _validate_group(group):
@@ -135,7 +170,7 @@ def build_profile(name, groups_text, description=None):
     Raises ValidationError on any problem. The returned dict is the single
     profile object (the API layer wraps it in a list).
     """
-    groups = parse_groups(groups_text or '')
+    groups = parse_groups_auto(groups_text or '')
     validate(name, groups)
     profile = {'name': name, 'groups': groups}
     if description:
