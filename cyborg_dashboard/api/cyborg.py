@@ -53,15 +53,17 @@ def make_adapter(request):
     )
 
 
+def _url(request, path):
+    base_uri = base.url_for(request, 'accelerator')
+    return base_uri.rstrip('/') + '/' + path.lstrip('/')
+
+
 def _get_json(request, path):
     client = make_adapter(request)
 
-    base_uri = base.url_for(request, 'accelerator')
-    new_uri = base_uri.rstrip('/') + '/' + path.lstrip('/')
-
     # LegacyJsonAdapter already decodes the payload; re-parsing the raw
     # response would blow up on an empty body (e.g. HTTP 204).
-    _response, body = client.get(new_uri)
+    _response, body = client.get(_url(request, path))
     return body if isinstance(body, dict) else {}
 
 
@@ -87,6 +89,42 @@ def device_list(request):
 def device_profile_list(request):
     """List device profiles from Cyborg API."""
     return _get_list(request, 'device_profiles', 'device_profiles')
+
+
+def device_profile_get(request, uuid_or_name):
+    """Return a single device profile by uuid or name."""
+    profiles = _get_json(
+        request, 'device_profiles/%s' % uuid_or_name).get('device_profiles')
+    # get_one returns {"device_profiles": [ <one> ]}; be tolerant of a bare
+    # object too.
+    if isinstance(profiles, list):
+        return profiles[0] if profiles else None
+    return profiles
+
+
+def device_profile_create(request, device_profile):
+    """Create a single device profile.
+
+    ``device_profile`` is a dict like::
+
+        {"name": "fpga-dp",
+         "groups": [{"resources:FPGA": "1",
+                     "trait:CUSTOM_FPGA_INTEL": "required"}],
+         "description": "..."}   # description optional
+
+    The Cyborg v2 POST body is a list and the service rejects anything other
+    than exactly one entry, so the single profile is wrapped here.
+    """
+    client = make_adapter(request)
+    _response, body = client.post(_url(request, 'device_profiles'),
+                                  json=[device_profile])
+    return body
+
+
+def device_profile_delete(request, uuid_or_name):
+    """Delete a device profile by uuid or name."""
+    client = make_adapter(request)
+    client.delete(_url(request, 'device_profiles/%s' % uuid_or_name))
 
 
 def accelerator_request_list(request):
