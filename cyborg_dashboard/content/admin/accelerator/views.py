@@ -60,10 +60,34 @@ def _resolve_instance_names(request, instance_uuids):
     return {uuid: server_map.get(uuid, uuid) for uuid in instance_uuids}
 
 
-def _decorate(request, devices):
-    """Attach display-ready instance tuples and a usage label."""
+def _fetch_placement(request, rp_uuids):
+    """Return ({rp: [resource class]}, {rp: [trait]}) from Placement.
+
+    Best effort: a device's resource class and traits are informational, so
+    a Placement failure degrades to empty rather than breaking the table.
+    """
+    inventory = {}
+    traits = {}
+    for rp_uuid in rp_uuids:
+        try:
+            inventory[rp_uuid] = list(
+                api.placement.resource_provider_inventories(
+                    request, rp_uuid).keys())
+            traits[rp_uuid] = api.placement.resource_provider_traits(
+                request, rp_uuid)
+        except Exception:
+            LOG.exception("Unable to read Placement data for resource "
+                          "provider %s; its resource class and traits will "
+                          "be blank.", rp_uuid)
+    return inventory, traits
+
+
+def _decorate(request, devices, deployables):
+    """Attach display-ready instances, usage, resource class and traits."""
     uuid_to_name = _resolve_instance_names(
         request, accel_usage.collect_instance_uuids(devices))
+    rp_inventory, rp_traits = _fetch_placement(
+        request, accel_usage.collect_rp_uuids(devices, deployables))
     for device in devices:
         device['attached_instances'] = [
             {'instance_uuid': uuid,
@@ -72,6 +96,11 @@ def _decorate(request, devices):
         ]
         device['usage_display'] = USAGE_LABELS.get(
             device.get('usage'), USAGE_LABELS[accel_usage.USAGE_UNKNOWN])
+        classes, traits = accel_usage.describe_placement(
+            accel_usage.rp_uuids_for_device(device, deployables),
+            rp_inventory, rp_traits)
+        device['resource_classes'] = classes
+        device['device_traits'] = traits
     return devices
 
 
@@ -113,4 +142,4 @@ class IndexView(tables.DataTableView):
 
         devices = accel_usage.correlate(devices, deployables, arqs,
                                         usage_known=usage_known)
-        return _decorate(self.request, devices)
+        return _decorate(self.request, devices, deployables)

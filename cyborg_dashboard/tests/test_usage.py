@@ -119,6 +119,54 @@ class CorrelateTest(unittest.TestCase):
         self.assertEqual(usage.USAGE_AVAILABLE, result[1]['usage'])
 
 
+class RpUuidsTest(unittest.TestCase):
+
+    def test_rp_uuids_for_device_via_deployables(self):
+        dev = device(id_=1, uuid='dev-a')
+        deps = [deployable(1, RP_A), deployable(1, RP_B),
+                deployable(2, 'rp-other')]
+        self.assertEqual([RP_A, RP_B],
+                         usage.rp_uuids_for_device(dev, deps))
+
+    def test_rp_uuids_match_by_uuid_key_too(self):
+        dev = device(uuid='dev-a')
+        deps = [deployable('dev-a', RP_A)]
+        self.assertEqual([RP_A], usage.rp_uuids_for_device(dev, deps))
+
+    def test_rp_uuids_deduplicated(self):
+        dev = device(id_=1, uuid='dev-a')
+        deps = [deployable(1, RP_A), deployable(1, RP_A)]
+        self.assertEqual([RP_A], usage.rp_uuids_for_device(dev, deps))
+
+    def test_collect_rp_uuids_across_devices(self):
+        devs = [device(id_=1, uuid='a'), device(id_=2, uuid='b')]
+        deps = [deployable(1, RP_A), deployable(2, RP_B)]
+        self.assertEqual({RP_A, RP_B}, usage.collect_rp_uuids(devs, deps))
+
+
+class DescribePlacementTest(unittest.TestCase):
+
+    def test_aggregates_classes_and_custom_traits(self):
+        classes, traits = usage.describe_placement(
+            [RP_A, RP_B],
+            {RP_A: ['PGPU'], RP_B: ['VGPU']},
+            {RP_A: ['CUSTOM_NVIDIA_1E78', 'HW_GPU_API_VULKAN'],
+             RP_B: ['CUSTOM_NVIDIA_1E78']})
+        self.assertEqual(['PGPU', 'VGPU'], classes)
+        # HW_ trait dropped; custom trait de-duplicated across providers.
+        self.assertEqual(['CUSTOM_NVIDIA_1E78'], traits)
+
+    def test_custom_only_false_keeps_all_traits(self):
+        _classes, traits = usage.describe_placement(
+            [RP_A], {}, {RP_A: ['CUSTOM_X', 'HW_GPU_API_VULKAN']},
+            custom_only=False)
+        self.assertEqual(['CUSTOM_X', 'HW_GPU_API_VULKAN'], traits)
+
+    def test_missing_rp_data_yields_empty(self):
+        self.assertEqual(([], []),
+                         usage.describe_placement([RP_A], {}, {}))
+
+
 class CollectInstanceUuidsTest(unittest.TestCase):
 
     def test_collects_across_devices(self):
