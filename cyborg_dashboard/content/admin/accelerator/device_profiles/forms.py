@@ -40,15 +40,20 @@ class CreateDeviceProfileForm(forms.SelfHandlingForm):
             "One 'key=value' per line; leave a blank line to start another "
             "group. Keys must start with 'resources:', 'trait:' or 'accel:'. "
             "Example:\n"
-            "resources:FPGA=1\n"
-            "trait:CUSTOM_FPGA_INTEL=required"))
+            "resources:CUSTOM_AICHIP=1\n"
+            "trait:CUSTOM_FURIOSA_0001=required\n"
+            "\n"
+            "The CLI/API JSON form is also accepted, so a value from "
+            "'openstack accelerator device profile show' pastes in as-is:\n"
+            '[{"resources:CUSTOM_AICHIP": 1, '
+            '"trait:CUSTOM_FURIOSA_0001": "required"}]'))
 
     def clean_groups(self):
         # Full group validation here so the error attaches to the groups field
         # instead of coming back as an HTTP 400 from Cyborg.
         data = self.cleaned_data['groups']
         try:
-            self._groups = validation.parse_groups(data)
+            self._groups = validation.parse_groups_auto(data)
             validation.validate_groups(self._groups)
         except validation.ValidationError as exc:
             raise forms.ValidationError(str(exc))

@@ -41,6 +41,23 @@ class CreateDeviceProfileFormTest(unittest.TestCase):
             [{'resources:FPGA': '1', 'trait:CUSTOM_A': 'required'}],
             profile['groups'])
 
+    def test_json_input_is_accepted(self):
+        form = _form(groups='[{"resources:FPGA": 1, '
+                            '"trait:CUSTOM_A": "required"}]')
+        self.assertTrue(form.is_valid(), form.errors)
+        with mock.patch(CREATE) as create, \
+                mock.patch('horizon.messages.success'):
+            self.assertTrue(form.handle(mock.Mock(), form.cleaned_data))
+        profile = create.call_args[0][1]
+        self.assertEqual(
+            [{'resources:FPGA': '1', 'trait:CUSTOM_A': 'required'}],
+            profile['groups'])
+
+    def test_invalid_json_is_a_field_error(self):
+        form = _form(groups='[{bad json}]')
+        self.assertFalse(form.is_valid())
+        self.assertIn('groups', form.errors)
+
     def test_bad_group_is_a_field_error_not_a_round_trip(self):
         form = _form(groups='resources:WIDGET=1')
         self.assertFalse(form.is_valid())

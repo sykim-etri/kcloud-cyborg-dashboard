@@ -53,6 +53,64 @@ class ParseGroupsTest(unittest.TestCase):
             validation.parse_groups("resources:FPGA")
 
 
+class ParseGroupsJsonTest(unittest.TestCase):
+
+    def test_parses_a_json_list(self):
+        text = ('[{"resources:CUSTOM_AICHIP": 1, '
+                '"trait:CUSTOM_FURIOSA_0001": "required"}]')
+        self.assertEqual(
+            [{'resources:CUSTOM_AICHIP': '1',
+              'trait:CUSTOM_FURIOSA_0001': 'required'}],
+            validation.parse_groups_json(text))
+
+    def test_wraps_a_bare_object_in_a_list(self):
+        self.assertEqual(
+            [{'resources:FPGA': '1'}],
+            validation.parse_groups_json('{"resources:FPGA": 1}'))
+
+    def test_numbers_are_normalised_to_strings(self):
+        out = validation.parse_groups_json('[{"resources:FPGA": 2}]')
+        self.assertEqual('2', out[0]['resources:FPGA'])
+
+    def test_invalid_json_raises(self):
+        with self.assertRaises(validation.ValidationError):
+            validation.parse_groups_json('[{not json}]')
+
+    def test_non_object_elements_rejected(self):
+        with self.assertRaises(validation.ValidationError):
+            validation.parse_groups_json('["resources:FPGA=1"]')
+
+
+class ParseGroupsAutoTest(unittest.TestCase):
+
+    def test_json_when_it_starts_with_bracket(self):
+        self.assertEqual(
+            [{'resources:FPGA': '1'}],
+            validation.parse_groups_auto('[{"resources:FPGA": 1}]'))
+
+    def test_json_when_it_starts_with_brace(self):
+        self.assertEqual(
+            [{'resources:FPGA': '1'}],
+            validation.parse_groups_auto('{"resources:FPGA": 1}'))
+
+    def test_key_value_otherwise(self):
+        self.assertEqual(
+            [{'resources:FPGA': '1'}],
+            validation.parse_groups_auto('resources:FPGA=1'))
+
+    def test_leading_whitespace_before_json_still_detected(self):
+        self.assertEqual(
+            [{'resources:FPGA': '1'}],
+            validation.parse_groups_auto('  [{"resources:FPGA": 1}]  '))
+
+    def test_both_forms_reach_the_same_validation(self):
+        # A JSON group with a bad resource class is caught by validate_groups
+        # exactly as the key=value form would be.
+        groups = validation.parse_groups_auto('[{"resources:WIDGET": 1}]')
+        with self.assertRaises(validation.ValidationError):
+            validation.validate_groups(groups)
+
+
 class ValidateTest(unittest.TestCase):
 
     def _valid_group(self):
@@ -131,6 +189,13 @@ class BuildProfileTest(unittest.TestCase):
     def test_invalid_input_raises_before_building(self):
         with self.assertRaises(validation.ValidationError):
             validation.build_profile('dp', "resources:WIDGET=1")
+
+    def test_accepts_json_groups(self):
+        profile = validation.build_profile(
+            'dp', '[{"resources:FPGA": 1, "trait:CUSTOM_A": "required"}]')
+        self.assertEqual(
+            [{'resources:FPGA': '1', 'trait:CUSTOM_A': 'required'}],
+            profile['groups'])
 
 
 if __name__ == '__main__':

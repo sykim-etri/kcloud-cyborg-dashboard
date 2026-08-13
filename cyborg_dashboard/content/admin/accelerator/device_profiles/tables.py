@@ -10,6 +10,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+import json
+
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import ngettext_lazy
 
@@ -19,13 +21,14 @@ from cyborg_dashboard.api import cyborg as cyborg_api
 
 
 def render_groups(device_profile):
-    """One line per group, 'key=value' joined, groups separated by ' | '."""
+    """Render groups as JSON, matching the API and the openstack CLI.
+
+    ``openstack accelerator device profile list`` shows the raw group list,
+    so the panel does the same instead of a bespoke 'key=value | ...' form,
+    keeping a value copy/paste-able between the CLI and the dashboard.
+    """
     groups = device_profile.get('groups') or []
-    rendered = []
-    for group in groups:
-        rendered.append(', '.join('%s=%s' % (k, v)
-                                  for k, v in sorted(group.items())))
-    return ' | '.join(rendered) or '-'
+    return json.dumps(groups, ensure_ascii=False)
 
 
 class CreateDeviceProfile(tables.LinkAction):
