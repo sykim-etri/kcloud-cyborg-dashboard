@@ -42,6 +42,9 @@ class IndexView(tables.DataTableView):
 class CreateView(forms.ModalFormView):
     form_class = device_profile_forms.CreateDeviceProfileForm
     template_name = 'admin/device_profiles/create.html'
+    # submit_url is required: _modal_form.html renders it as the form action,
+    # so without it the modal posts to '.../None' and 404s.
+    submit_url = reverse_lazy('horizon:admin:device_profiles:create')
     success_url = reverse_lazy('horizon:admin:device_profiles:index')
     page_title = _("Create Device Profile")
     submit_label = _("Create")
