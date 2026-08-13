@@ -27,9 +27,9 @@ class FakeServer(object):
 
 
 NOVA_LIST = 'openstack_dashboard.api.nova.server_list'
-PLACEMENT_INV = ('openstack_dashboard.api.placement'
+PLACEMENT_INV = ('cyborg_dashboard.api.placement'
                  '.resource_provider_inventories')
-PLACEMENT_TRAITS = ('openstack_dashboard.api.placement'
+PLACEMENT_TRAITS = ('cyborg_dashboard.api.placement'
                     '.resource_provider_traits')
 
 

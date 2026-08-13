@@ -20,6 +20,7 @@ from horizon import tables
 from openstack_dashboard import api
 
 from cyborg_dashboard.api import cyborg as cyborg_api
+from cyborg_dashboard.api import placement as placement_api
 from cyborg_dashboard.content.admin.accelerator import tables as accel_tables
 from cyborg_dashboard.content.admin.accelerator import usage as accel_usage
 
@@ -71,9 +72,9 @@ def _fetch_placement(request, rp_uuids):
     for rp_uuid in rp_uuids:
         try:
             inventory[rp_uuid] = list(
-                api.placement.resource_provider_inventories(
+                placement_api.resource_provider_inventories(
                     request, rp_uuid).keys())
-            traits[rp_uuid] = api.placement.resource_provider_traits(
+            traits[rp_uuid] = placement_api.resource_provider_traits(
                 request, rp_uuid)
         except Exception:
             LOG.exception("Unable to read Placement data for resource "
