@@ -72,31 +72,31 @@ class DeviceProfileApiTest(unittest.TestCase):
             'http://accel.example/v2/device_profiles/dp', url)
 
     def test_get_asks_for_the_microversion_that_accepts_a_name(self):
-        # Below 2.2 Cyborg answers a lookup by name with 406.
+        # Below 2.2 Cyborg answers a lookup by name with 406. The value is a
+        # bare number: Cyborg parses "accelerator 2.2" as 2.0.
         self.client.get.return_value = (mock.Mock(), {'device_profile': {}})
         cyborg.device_profile_get(mock.Mock(), 'dp')
         headers = self.client.get.call_args[1]['headers']
-        self.assertEqual('accelerator 2.2', headers['OpenStack-API-Version'])
+        self.assertEqual('2.2', headers['OpenStack-API-Version'])
 
 
 class AdapterTest(unittest.TestCase):
 
     def _sent_version(self, **kwargs):
-        adapter = cyborg.Adapter(mock.Mock(), api_version='accelerator 2.0')
+        adapter = cyborg.Adapter(mock.Mock(), api_version=cyborg.API_VERSION)
         with mock.patch('keystoneauth1.adapter.LegacyJsonAdapter.request',
                         return_value=(mock.Mock(), {})) as parent:
             adapter.request('http://accel.example/v2/devices', 'GET',
                             **kwargs)
         return parent.call_args[1]['headers']['OpenStack-API-Version']
 
-    def test_default_microversion_is_sent(self):
-        self.assertEqual('accelerator 2.0', self._sent_version())
+    def test_default_microversion_is_a_bare_2_0(self):
+        self.assertEqual('2.0', self._sent_version())
 
     def test_per_call_microversion_wins_over_the_default(self):
         self.assertEqual(
-            'accelerator 2.2',
-            self._sent_version(
-                headers={'OpenStack-API-Version': 'accelerator 2.2'}))
+            '2.2',
+            self._sent_version(headers={'OpenStack-API-Version': '2.2'}))
 
 
 if __name__ == '__main__':

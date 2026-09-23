@@ -19,9 +19,14 @@ from openstack_dashboard.api import base
 
 from horizon.utils.memoized import memoized
 
+# Cyborg reads OpenStack-API-Version as a bare "<major>.<minor>" (since
+# upstream change 279a260, bug 2049489). An "accelerator 2.2" value fails
+# to parse and Cyborg silently falls back to 2.0, so send the number alone.
+API_VERSION = "2.0"
+
 # Cyborg's MINOR_2_DP_BY_NAME: the first microversion whose device profile
 # get_one accepts a name as well as a uuid.
-DEVICE_PROFILE_BY_NAME_VERSION = "accelerator 2.2"
+DEVICE_PROFILE_BY_NAME_VERSION = "2.2"
 
 
 class Adapter(adapter.LegacyJsonAdapter):
@@ -55,7 +60,7 @@ def make_adapter(request):
         verify = settings.OPENSTACK_SSL_CACERT
     return Adapter(
         session.Session(auth=auth, verify=verify),
-        api_version="accelerator 2.0",
+        api_version=API_VERSION,
     )
 
 
