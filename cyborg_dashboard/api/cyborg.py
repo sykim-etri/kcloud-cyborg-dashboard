@@ -19,6 +19,10 @@ from openstack_dashboard.api import base
 
 from horizon.utils.memoized import memoized
 
+# Cyborg's MINOR_2_DP_BY_NAME: the first microversion whose device profile
+# get_one accepts a name as well as a uuid.
+DEVICE_PROFILE_BY_NAME_VERSION = "accelerator 2.2"
+
 
 class Adapter(adapter.LegacyJsonAdapter):
     def __init__(self, *args, **kwargs):
@@ -28,7 +32,9 @@ class Adapter(adapter.LegacyJsonAdapter):
     def request(self, url, method, **kwargs):
         kwargs.setdefault('headers', kwargs.get('headers', {}))
         if self.api_version is not None:
-            kwargs['headers']['OpenStack-API-Version'] = self.api_version
+            # A call that needs a newer microversion passes its own header.
+            kwargs['headers'].setdefault('OpenStack-API-Version',
+                                         self.api_version)
         resp, body = super().request(url, method, **kwargs)
         return resp, body
 
@@ -58,12 +64,12 @@ def _url(request, path):
     return base_uri.rstrip('/') + '/' + path.lstrip('/')
 
 
-def _get_json(request, path):
+def _get_json(request, path, headers=None):
     client = make_adapter(request)
 
     # LegacyJsonAdapter already decodes the payload; re-parsing the raw
     # response would blow up on an empty body (e.g. HTTP 204).
-    _response, body = client.get(_url(request, path))
+    _response, body = client.get(_url(request, path), headers=headers or {})
     return body if isinstance(body, dict) else {}
 
 
@@ -92,14 +98,18 @@ def device_profile_list(request):
 
 
 def device_profile_get(request, uuid_or_name):
-    """Return a single device profile by uuid or name."""
-    profiles = _get_json(
-        request, 'device_profiles/%s' % uuid_or_name).get('device_profiles')
-    # get_one returns {"device_profiles": [ <one> ]}; be tolerant of a bare
-    # object too.
-    if isinstance(profiles, list):
-        return profiles[0] if profiles else None
-    return profiles
+    """Return a single device profile by uuid or name.
+
+    get_one answers ``{"device_profile": {...}}``: a singular key holding
+    one object, unlike the list call. Cyborg looks a profile up by name
+    only from microversion 2.2 and answers 406 below it, so this call asks
+    for 2.2 instead of the adapter's 2.0. An unknown profile raises the
+    404 from Cyborg, as the other calls do for their errors.
+    """
+    body = _get_json(request, 'device_profiles/%s' % uuid_or_name,
+                     headers={'OpenStack-API-Version':
+                              DEVICE_PROFILE_BY_NAME_VERSION})
+    return body.get('device_profile')
 
 
 def device_profile_create(request, device_profile):

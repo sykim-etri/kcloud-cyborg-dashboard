@@ -56,16 +56,47 @@ class DeviceProfileApiTest(unittest.TestCase):
         self.assertEqual(
             'http://accel.example/v2/device_profiles/dp-1', url)
 
-    def test_get_unwraps_single_element_list(self):
+    def test_get_returns_the_singular_device_profile_object(self):
+        # Shape of Cyborg's doc/api_samples device_profiles-getone-resp.json.
         self.client.get.return_value = (
-            mock.Mock(), {'device_profiles': [{'name': 'dp'}]})
+            mock.Mock(), {'device_profile': {'name': 'dp', 'uuid': 'u-1'}})
         self.assertEqual(
-            {'name': 'dp'}, cyborg.device_profile_get(mock.Mock(), 'dp'))
+            {'name': 'dp', 'uuid': 'u-1'},
+            cyborg.device_profile_get(mock.Mock(), 'dp'))
 
-    def test_get_returns_none_when_empty(self):
-        self.client.get.return_value = (
-            mock.Mock(), {'device_profiles': []})
-        self.assertIsNone(cyborg.device_profile_get(mock.Mock(), 'nope'))
+    def test_get_targets_the_named_resource(self):
+        self.client.get.return_value = (mock.Mock(), {'device_profile': {}})
+        cyborg.device_profile_get(mock.Mock(), 'dp')
+        url = self.client.get.call_args[0][0]
+        self.assertEqual(
+            'http://accel.example/v2/device_profiles/dp', url)
+
+    def test_get_asks_for_the_microversion_that_accepts_a_name(self):
+        # Below 2.2 Cyborg answers a lookup by name with 406.
+        self.client.get.return_value = (mock.Mock(), {'device_profile': {}})
+        cyborg.device_profile_get(mock.Mock(), 'dp')
+        headers = self.client.get.call_args[1]['headers']
+        self.assertEqual('accelerator 2.2', headers['OpenStack-API-Version'])
+
+
+class AdapterTest(unittest.TestCase):
+
+    def _sent_version(self, **kwargs):
+        adapter = cyborg.Adapter(mock.Mock(), api_version='accelerator 2.0')
+        with mock.patch('keystoneauth1.adapter.LegacyJsonAdapter.request',
+                        return_value=(mock.Mock(), {})) as parent:
+            adapter.request('http://accel.example/v2/devices', 'GET',
+                            **kwargs)
+        return parent.call_args[1]['headers']['OpenStack-API-Version']
+
+    def test_default_microversion_is_sent(self):
+        self.assertEqual('accelerator 2.0', self._sent_version())
+
+    def test_per_call_microversion_wins_over_the_default(self):
+        self.assertEqual(
+            'accelerator 2.2',
+            self._sent_version(
+                headers={'OpenStack-API-Version': 'accelerator 2.2'}))
 
 
 if __name__ == '__main__':
