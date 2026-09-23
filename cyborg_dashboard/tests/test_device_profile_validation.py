@@ -157,6 +157,28 @@ class ValidateTest(unittest.TestCase):
     def test_custom_resource_class_accepted(self):
         validation.validate('dp', [{'resources:CUSTOM_THING': '2'}])
 
+    def test_single_device_amount_above_one_rejected(self):
+        # Each such device is its own resource provider with inventory 1.
+        for rc in validation.SINGLE_DEVICE_RESOURCES:
+            with self.assertRaises(validation.ValidationError):
+                validation.validate('dp', [{'resources:%s' % rc: '2'}])
+
+    def test_two_single_devices_as_two_groups_accepted(self):
+        validation.validate('dp', [{'resources:CUSTOM_AICHIP': '1'},
+                                   {'resources:CUSTOM_AICHIP': '1'}])
+
+    def test_fpga_amount_above_one_accepted(self):
+        # The fake driver exposes one FPGA provider with inventory 16.
+        validation.validate('dp', [{'resources:FPGA': '2'}])
+
+    def test_vgpu_amount_above_one_accepted(self):
+        validation.validate('dp', [{'resources:VGPU': '4'}])
+
+    def test_resource_amount_below_one_rejected(self):
+        for amount in ('0', '-1'):
+            with self.assertRaises(validation.ValidationError):
+                validation.validate('dp', [{'resources:FPGA': amount}])
+
     def test_unknown_resource_class_rejected(self):
         with self.assertRaises(validation.ValidationError):
             validation.validate('dp', [{'resources:WIDGET': '1'}])

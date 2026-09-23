@@ -39,6 +39,8 @@ class CreateDeviceProfileForm(forms.SelfHandlingForm):
         help_text=_(
             "One 'key=value' per line; leave a blank line to start another "
             "group. Keys must start with 'resources:', 'trait:' or 'accel:'. "
+            "For AICHIP, PGPU, QAT, NIC and SSD a group requests one device, "
+            "so the amount is 1; add a group per device to request more. "
             "Example:\n"
             "resources:CUSTOM_AICHIP=1\n"
             "trait:CUSTOM_FURIOSA_0001=required\n"

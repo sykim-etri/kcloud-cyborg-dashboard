@@ -15,7 +15,9 @@
 No Django or Horizon imports, so it can be unit tested standalone. It mirrors
 Cyborg's server-side ``_validate_post_request`` (api/controllers/v2/
 device_profiles.py) so the form can reject bad input before a round trip
-rather than surfacing a raw HTTP 400.
+rather than surfacing a raw HTTP 400. The one deliberate difference is the
+resource amount: it must be positive, and 1 for resource classes whose
+devices can only schedule one per group.
 
 Keep the rules in sync with the Cyborg release this plugin targets.
 """
@@ -33,6 +35,17 @@ TRAIT_VALUES = ('required', 'forbidden')
 SUPPORT_RESOURCES = (
     'FPGA', 'GPU', 'VGPU', 'PGPU',
     'CUSTOM_QAT', 'CUSTOM_NIC', 'CUSTOM_SSD', 'CUSTOM_AICHIP',
+)
+
+# Resource classes whose Cyborg drivers register every device as its own
+# resource provider with an inventory of 1 (num_accelerators = 1): AICHIP
+# (furiosa, rebellions, ascend), PGPU, QAT, NIC and SSD. A group asking for
+# more than 1 of these can never schedule (see _validate_group).
+# FPGA and VGPU stay open: the fake driver (16) and multi-region Intel FPGAs
+# expose FPGA inventories above 1, and a vGPU provider holds one unit per
+# vGPU instance.
+SINGLE_DEVICE_RESOURCES = (
+    'PGPU', 'CUSTOM_AICHIP', 'CUSTOM_QAT', 'CUSTOM_NIC', 'CUSTOM_SSD',
 )
 
 
@@ -128,11 +141,24 @@ def _validate_group(group):
                     "Unsupported resource class %r. Use one of %s or a "
                     "CUSTOM_ class." % (rc, ', '.join(SUPPORT_RESOURCES)))
             try:
-                int(value)
+                amount = int(value)
             except (TypeError, ValueError):
                 raise ValidationError(
                     "Resource amount for %r must be an integer, got %r."
                     % (rc, value))
+            # Stricter than Cyborg, which accepts any integer. Nova turns a
+            # group into one Placement request group, and one resource
+            # provider must serve all of it. For single-device classes that
+            # provider holds 1, so more than 1 would never schedule.
+            if amount < 1:
+                raise ValidationError(
+                    "Resource amount for %r must be at least 1, got %r."
+                    % (rc, value))
+            if rc in SINGLE_DEVICE_RESOURCES and amount != 1:
+                raise ValidationError(
+                    "Resource amount for %r must be 1, since each device is "
+                    "its own resource provider; add one group per device to "
+                    "request more, got %r." % (rc, value))
         # accel: keys are accepted as-is; Cyborg does not constrain them here.
 
 
